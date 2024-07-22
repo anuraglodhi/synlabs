@@ -309,7 +309,7 @@ func getJob(c *gin.Context) {
 	db := dbConn()
 
 	var job Job
-	tx := db.Model(&Job{}).Preload("Applicants").First(&job, jobId)
+	tx := db.Model(&Job{}).Preload("Applicants").Preload("PostedBy").First(&job, jobId)
 	if tx.Error != nil {
 		c.JSON(404, gin.H{
 			"error": "Job not found",
@@ -350,7 +350,7 @@ func getApplicants(c *gin.Context) {
 
 	var applicants []User
 
-	tx := db.Where("user_type = ?", "applicant").Find(&applicants)
+	tx := db.Where("user_type = ?", "applicant").Preload("Profile").Find(&applicants)
 	if tx.Error != nil {
 		c.JSON(500, gin.H{
 			"error": "Error fetching applicants",
