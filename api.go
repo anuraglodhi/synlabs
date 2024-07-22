@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -108,6 +110,62 @@ func login(c *gin.Context) {
 	})
 }
 
+func createJob(c *gin.Context) {
+	title := c.PostForm("title")
+	description := c.PostForm("description")
+	companyName := c.PostForm("companyName")
+
+	if title == "" || description == "" || companyName == "" {
+		c.JSON(400, gin.H{
+			"error": "title, description, and companyName are required fields",
+		})
+		return
+	}
+
+	tokenString := c.GetHeader("Authorization")
+	if tokenString == "" {
+		c.JSON(401, gin.H{
+			"error": "Authorization header is required",
+		})
+		return
+	}
+	tokenString = tokenString[len("Bearer "):]
+
+	poster, err := getUserFromToken(tokenString)
+	if err != nil {
+		c.JSON(401, gin.H{
+			"error": "Invalid token",
+		})
+		return
+	}
+
+	if poster.UserType != "admin" {
+		c.JSON(403, gin.H{
+			"error": "Only admins can access this endpoint",
+		})
+		return
+	}
+
+	tx := db.Create(&Job{
+		Title:             title,
+		Description:       description,
+		CompanyName:       companyName,
+		PostedByID:        poster.ID,
+		PostedOn:          time.Now(),
+		TotalApplications: 0,
+	})
+	if tx.Error != nil {
+		c.JSON(500, gin.H{
+			"error": "Error creating job",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "Job created successfully",
+	})
+}
+
 func getApplicants(c *gin.Context) {
 	tokenString := c.GetHeader("Authorization")
 	if tokenString == "" {
@@ -196,5 +254,60 @@ func getApplicant(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"applicant": applicant,
-	}) 
+	})
+}
+
+func getJobs(c *gin.Context) {
+	db := dbConn()
+
+	var jobs []Job
+	
+	// Using new structs to avoid sending sensitive information
+
+	type SafeUser struct {
+		ID    uint
+		Email string
+		Name  string
+	}
+
+	type JobWithoutApplicants struct {
+		ID                uint
+		Title             string
+		Description       string
+		CompanyName       string
+		PostedByID        uint
+		PostedOn          time.Time
+		TotalApplications int
+		PostedBy          SafeUser
+	}
+
+	tx := db.Model(&Job{}).Preload("PostedBy").Find(&jobs)
+	if tx.Error != nil {
+		c.JSON(500, gin.H{
+			"error": "Error fetching jobs",
+		})
+		return
+	}
+
+	var jobsWithoutApplicants []JobWithoutApplicants
+	for _, job := range jobs {
+		jobsWithoutApplicants = append(jobsWithoutApplicants, JobWithoutApplicants{
+			ID:                job.ID,
+			Title:             job.Title,
+			Description:       job.Description,
+			CompanyName:       job.CompanyName,
+			PostedByID:        job.PostedByID,
+			PostedOn:          job.PostedOn,
+			TotalApplications: job.TotalApplications,
+			PostedBy: SafeUser{
+				ID:    job.PostedBy.ID,
+				Email: job.PostedBy.Email,
+				Name:  job.PostedBy.Name,
+			},
+		})
+	}
+
+	c.JSON(200, gin.H{
+		"jobs": jobsWithoutApplicants,
+	})
 }

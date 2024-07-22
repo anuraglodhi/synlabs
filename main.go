@@ -26,8 +26,10 @@ func main() {
 
 	r.POST("/signup", signup)
 	r.POST("/login", login)
+	r.POST("/admin/job", createJob)
 	r.GET("/admin/applicants", getApplicants)
 	r.GET("/admin/applicant/:applicant_id", getApplicant)
+	r.GET("/jobs", getJobs)
 
 	r.Run()
 }
