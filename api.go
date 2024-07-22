@@ -149,3 +149,52 @@ func getApplicants(c *gin.Context) {
 		"applicants": applicants,
 	})
 }
+
+func getApplicant(c *gin.Context) {
+	id := c.Param("applicant_id")
+	if id == "" {
+		c.JSON(400, gin.H{
+			"error": "applicant_id is a required parameter",
+		})
+	}
+
+	tokenString := c.GetHeader("Authorization")
+	if tokenString == "" {
+		c.JSON(401, gin.H{
+			"error": "Authorization header is required",
+		})
+		return
+	}
+	tokenString = tokenString[len("Bearer "):]
+
+	user, err := getUserFromToken(tokenString)
+	if err != nil {
+		c.JSON(401, gin.H{
+			"error": "Invalid token",
+		})
+		return
+	}
+
+	if user.UserType != "admin" {
+		c.JSON(403, gin.H{
+			"error": "Only admins can access this endpoint",
+		})
+		return
+	}
+
+	db := dbConn()
+
+	var applicant User
+
+	tx := db.Where("id = ? AND user_type = ?", id, "applicant").First(&applicant)
+	if tx.Error != nil {
+		c.JSON(404, gin.H{
+			"error": "Applicant not found",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"applicant": applicant,
+	}) 
+}
