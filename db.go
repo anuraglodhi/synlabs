@@ -38,12 +38,12 @@ type User struct {
 	UserType        UserType `gorm:"size:20;not null"`
 	PasswordHash    string   `gorm:"size:255;not null"`
 	ProfileHeadline string   `gorm:"size:255"`
+	Profile         Profile  `gorm:"foreignKey:UserID"`
 }
 
 type Profile struct {
 	gorm.Model
-	UserID            uint   `gorm:"not null"`
-	User			  User  
+	UserID            uint `gorm:"not null"`
 	ResumeFileAddress string `gorm:"size:255"`
 	Skills            string `gorm:"type:text"`
 	Education         string `gorm:"type:text"`
@@ -63,10 +63,4 @@ type Job struct {
 	PostedByID        uint      `gorm:"not null"`
 	PostedBy          User      `gorm:"foreignKey:PostedByID"`
 	Applicants        []User    `gorm:"many2many:job_applications;"`
-}
-
-type JobApplication struct {
-	JobID       uint `gorm:"primaryKey"`
-	ApplicantID uint `gorm:"primaryKey"`
-	AppliedAt   time.Time
 }

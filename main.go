@@ -22,14 +22,17 @@ func main() {
 	})
 
 	db := dbConn()
-	db.AutoMigrate(&User{}, &Profile{}, &Job{}, &JobApplication{})
+	db.AutoMigrate(&User{}, &Profile{}, &Job{})
 
 	r.POST("/signup", signup)
 	r.POST("/login", login)
+	r.POST("/uploadResume", uploadResume)
 	r.POST("/admin/job", createJob)
+	r.GET("/admin/job/:job_id", getJob)
 	r.GET("/admin/applicants", getApplicants)
 	r.GET("/admin/applicant/:applicant_id", getApplicant)
 	r.GET("/jobs", getJobs)
+	r.GET("/jobs/apply", applyJob)
 
 	r.Run()
 }

@@ -1,6 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -110,6 +116,137 @@ func login(c *gin.Context) {
 	})
 }
 
+func uploadResume(c *gin.Context) {
+	tokenString := c.GetHeader("Authorization")
+	if tokenString == "" {
+		c.JSON(401, gin.H{
+			"error": "Authorization header is required",
+		})
+		return
+	}
+	tokenString = tokenString[len("Bearer "):]
+
+	user, err := getUserFromToken(tokenString)
+	if err != nil {
+		c.JSON(401, gin.H{
+			"error": "Invalid token",
+		})
+		return
+	}
+
+	log.Println(user.UserType)
+	if user.UserType != "applicant" {
+		c.JSON(403, gin.H{
+			"error": "Only applicants can access this endpoint",
+		})
+		return
+	}
+
+	fileHeader, err := c.FormFile("resume")
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": "Resume file is required",
+		})
+		return
+	}
+
+	resumeAPIKey := os.Getenv("RESUME_API_KEY")
+	if resumeAPIKey == "" {
+		c.JSON(500, gin.H{
+			"error": "Can not process resume",
+		})
+		log.Println("RESUME_API_KEY is not set")
+		return
+	}
+
+	if fileHeader.Header.Get("Content-Type") != "application/pdf" && fileHeader.Header.Get("Content-Type") != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
+		c.JSON(400, gin.H{
+			"error": "Resume file should be a pdf or docx",
+		})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Error reading file",
+		})
+		return
+	}
+
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Error reading file",
+		})
+		return
+	}
+
+	apiUrl := "https://api.apilayer.com/resume_parser/upload"
+	apikey := os.Getenv("RESUME_API_KEY")
+
+	req, err := http.NewRequest("POST", apiUrl, bytes.NewBuffer(fileBytes))
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Error uploading resume",
+		})
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("apikey", apikey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Error uploading resume",
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Error reading response",
+		})
+		return
+	}
+
+	var result interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Error parsing response",
+		})
+		return
+	}
+
+	skills, _ := json.Marshal(result.(map[string]interface{})["skills"])
+	education, _ := json.Marshal(result.(map[string]interface{})["education"])
+	experience, _ := json.Marshal(result.(map[string]interface{})["experience"])
+	name := user.Name
+	email := user.Email
+	phone := result.(map[string]interface{})["phone"]
+
+
+	db.Model(&user).Association("Profile").Append(&Profile{
+		UserID: user.ID,
+		ResumeFileAddress: "",
+		Skills: string(skills),
+		Education: string(education),
+		Experience: string(experience),
+		Name: name,
+		Email: email,
+		Phone: phone.(string),
+	})
+
+	c.JSON(200, gin.H{
+		"message": "Resume uploaded successfully",
+	})
+}
+
 func createJob(c *gin.Context) {
 	title := c.PostForm("title")
 	description := c.PostForm("description")
@@ -164,6 +301,24 @@ func createJob(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "Job created successfully",
 	})
+}
+
+func getJob(c *gin.Context) {
+	jobId := c.Param("job_id")
+
+	db := dbConn()
+
+	var job Job
+	tx := db.Model(&Job{}).Preload("Applicants").First(&job, jobId)
+	if tx.Error != nil {
+		c.JSON(404, gin.H{
+			"error": "Job not found",
+		})
+		return
+	}
+	
+
+	c.JSON(200, job)
 }
 
 func getApplicants(c *gin.Context) {
@@ -261,7 +416,7 @@ func getJobs(c *gin.Context) {
 	db := dbConn()
 
 	var jobs []Job
-	
+
 	// Using new structs to avoid sending sensitive information
 
 	type SafeUser struct {
@@ -309,5 +464,76 @@ func getJobs(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"jobs": jobsWithoutApplicants,
+	})
+}
+
+func applyJob(c *gin.Context) {
+	jobId := c.Query("job_id")
+	if jobId == "" {
+		c.JSON(400, gin.H{
+			"error": "job_id is a required parameter",
+		})
+		return
+	}
+
+	tokenString := c.GetHeader("Authorization")
+	if tokenString == "" {
+		c.JSON(401, gin.H{
+			"error": "Authorization header is required",
+		})
+		return
+	}
+	tokenString = tokenString[len("Bearer "):]
+
+	applicant, err := getUserFromToken(tokenString)
+	if err != nil {
+		c.JSON(401, gin.H{
+			"error": "Invalid token",
+		})
+		return
+	}
+
+	if applicant.UserType != "applicant" {
+		c.JSON(403, gin.H{
+			"error": "Only applicants can apply for jobs",
+		})
+		return
+	}
+
+	db := dbConn()
+
+	var job Job
+	tx := db.Where("id = ?", jobId).First(&job)
+	if tx.Error != nil {
+		c.JSON(404, gin.H{
+			"error": "Job not found",
+		})
+		return
+	}
+	
+	tx = db.Begin()
+	
+	err = db.Model(&job).Association("Applicants").Append(&applicant)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(500, gin.H{
+			"error": "Error applying for job",
+		})
+		return
+	}
+	
+	up := db.Model(&Job{}).Where("id = ?", job.ID).Update("total_applications", job.TotalApplications+1)
+	if up.Error != nil {
+		tx.Rollback()
+		c.JSON(500, gin.H{
+			"error": "Error applying for job",
+		})
+		return
+	}
+
+	tx.Commit()
+
+	c.JSON(200, gin.H{
+		"message": "Applied for job successfully",
 	})
 }
