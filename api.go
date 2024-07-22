@@ -399,7 +399,7 @@ func getApplicant(c *gin.Context) {
 
 	var applicant User
 
-	tx := db.Where("id = ? AND user_type = ?", id, "applicant").First(&applicant)
+	tx := db.Where("id = ? AND user_type = ?", id, "applicant").Preload("Profile").First(&applicant)
 	if tx.Error != nil {
 		c.JSON(404, gin.H{
 			"error": "Applicant not found",
