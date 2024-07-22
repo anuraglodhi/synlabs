@@ -230,16 +230,15 @@ func uploadResume(c *gin.Context) {
 	email := user.Email
 	phone := result.(map[string]interface{})["phone"]
 
-
 	db.Model(&user).Association("Profile").Append(&Profile{
-		UserID: user.ID,
+		UserID:            user.ID,
 		ResumeFileAddress: "",
-		Skills: string(skills),
-		Education: string(education),
-		Experience: string(experience),
-		Name: name,
-		Email: email,
-		Phone: phone.(string),
+		Skills:            string(skills),
+		Education:         string(education),
+		Experience:        string(experience),
+		Name:              name,
+		Email:             email,
+		Phone:             phone.(string),
 	})
 
 	c.JSON(200, gin.H{
@@ -316,7 +315,6 @@ func getJob(c *gin.Context) {
 		})
 		return
 	}
-	
 
 	c.JSON(200, job)
 }
@@ -510,9 +508,9 @@ func applyJob(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	tx = db.Begin()
-	
+
 	err = db.Model(&job).Association("Applicants").Append(&applicant)
 	if err != nil {
 		tx.Rollback()
@@ -521,7 +519,7 @@ func applyJob(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	up := db.Model(&Job{}).Where("id = ?", job.ID).Update("total_applications", job.TotalApplications+1)
 	if up.Error != nil {
 		tx.Rollback()

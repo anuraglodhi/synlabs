@@ -43,7 +43,7 @@ type User struct {
 
 type Profile struct {
 	gorm.Model
-	UserID            uint `gorm:"not null"`
+	UserID            uint   `gorm:"not null"`
 	ResumeFileAddress string `gorm:"size:255"`
 	Skills            string `gorm:"type:text"`
 	Education         string `gorm:"type:text"`
