@@ -2,6 +2,7 @@
 
 ## How to run
 Project uses postgres database. Create a postgres server and update its details in the .env file.
+You can also use the default hosted database.
 Create a database with name 'synlabs'
 
 Run the project using 
